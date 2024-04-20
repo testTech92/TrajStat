@@ -20,6 +20,7 @@ import org.meteoinfo.chart.plot.*;
 import org.meteoinfo.common.Extent3D;
 import org.meteoinfo.common.XAlign;
 import org.meteoinfo.common.YAlign;
+import org.meteoinfo.geo.io.GraphicUtil;
 import org.meteoinfo.geo.legend.GroupNode;
 import org.meteoinfo.geo.legend.LayerNode;
 import org.meteoinfo.geo.legend.LegendManage;
@@ -261,7 +262,7 @@ public class FrmChart extends JDialog {
         List<ColorBreak> cbs = new ArrayList<>();
         for (int i = 0; i < trajN; i++) {
             PolylineZShape shape = (PolylineZShape) this.trajShapes.get(i)[0];
-            if (this.dateHeight.size() > 0 && this.dateHeight.size() > i) {
+            if (!this.dateHeight.isEmpty() && this.dateHeight.size() > i) {
                 seriesKey = this.dateHeight.get(i);
             } else {
                 seriesKey = "Line " + String.valueOf(i);
@@ -328,10 +329,10 @@ public class FrmChart extends JDialog {
         plot.getGridLine().setDrawZLine(true);
         for (MapLayer layer : this.mLayers) {
             if (layer.getLayerType() == LayerTypes.VECTOR_LAYER) {
-                GraphicCollection gcs = GraphicFactory.createGraphicsFromLayer((VectorLayer) layer, 0, 0);
+                GraphicCollection gcs = GraphicUtil.layerToGraphics((VectorLayer) layer, 0, 0);
                 plot.addGraphic(gcs);
             } else {
-                GraphicCollection gcs = GraphicFactory.createImage((ImageLayer) layer, 0, 0, null);
+                GraphicCollection gcs = GraphicUtil.layerToGraphics((ImageLayer) layer, 0, 0, null);
                 plot.addGraphic(gcs);
             }
         }

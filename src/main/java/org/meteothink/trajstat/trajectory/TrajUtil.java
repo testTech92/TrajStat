@@ -557,10 +557,8 @@ public class TrajUtil {
      * @param pointNum Endpoint number of one trajectory
      * @param layers Trajectory layers
      * @return Mean trajectory data of all clusters
-     * @throws FileNotFoundException
-     * @throws IOException
      */
-    public static double[][] calMeanTrajs(List<Integer> clusters, int CLev, int pointNum, List<VectorLayer> layers) throws FileNotFoundException, IOException {
+    public static double[][] calMeanTrajs(List<Integer> clusters, int CLev, int pointNum, List<VectorLayer> layers) {
         int M;
         int cluster;
         int i, j;
@@ -618,11 +616,9 @@ public class TrajUtil {
      * @param layers Trajectory layers
      * @param disType Distance type
      * @return Mean trajectory data of all clusters
-     * @throws FileNotFoundException
-     * @throws IOException
      */
     public static double calTSV(List<Integer> clusters, int CLev, int pointNum, List<VectorLayer> layers,
-            DistanceType disType) throws FileNotFoundException, IOException {
+            DistanceType disType) throws IOException {
         //Calculate mean trajectories
         double[][] trajDataArray = calMeanTrajs(clusters, CLev, pointNum, layers);
 

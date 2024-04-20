@@ -772,11 +772,11 @@ public class FrmClusterCal extends javax.swing.JDialog {
             DistanceType disType = (DistanceType) this.jComboBox_Distance.getSelectedItem();
             List<List<Integer>> clusters = new ArrayList<>();
             for (i = 2; i <= maxClusterNum; i++) {
-                clusters.add(new ArrayList<Integer>());
+                clusters.add(new ArrayList<>());
             }
             int pointNum = Integer.parseInt(this.jLabel_PointNumValue.getText());
             int cluster;
-            src = new BufferedReader(new FileReader(new File(clusterFile)));
+            src = new BufferedReader(new FileReader(clusterFile));
             src.readLine();
             String[] dArray;
             String line = src.readLine();
@@ -836,7 +836,7 @@ public class FrmClusterCal extends javax.swing.JDialog {
             BufferedImage image = null;
             try {
                 image = ImageIO.read(this.getClass().getResource("/images/TrajStat_Logo.png"));
-            } catch (IOException e) {
+            } catch (IOException ignored) {
             }
             frame.setIconImage(image);
             frame.getContentPane().add(chartPanel, BorderLayout.CENTER);
@@ -844,14 +844,14 @@ public class FrmClusterCal extends javax.swing.JDialog {
             frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             frame.setLocationRelativeTo(this);
             frame.setVisible(true);
-        } catch (FileNotFoundException ex) {
-            Logger.getLogger(FrmClusterCal.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
             Logger.getLogger(FrmClusterCal.class.getName()).log(Level.SEVERE, null, ex);
         } finally {
             this.setCursor(Cursor.getDefaultCursor());
             try {
-                src.close();
+                if (src != null) {
+                    src.close();
+                }
             } catch (IOException ex) {
                 Logger.getLogger(FrmClusterCal.class.getName()).log(Level.SEVERE, null, ex);
             }

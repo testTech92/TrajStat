@@ -9,8 +9,5 @@
         <module name="TrajStat" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="TrajStat" target="1.8" />
-    </bytecodeTargetLevel>
   </component>
 </project>

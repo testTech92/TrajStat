@@ -16,6 +16,7 @@ package org.meteothink.trajstat;
 import org.meteoinfo.common.GenericFileFilter;
 import org.meteoinfo.common.util.GlobalUtil;
 import org.meteoinfo.geo.legend.*;
+import org.meteoinfo.geometry.legend.LegendManage;
 import org.meteoinfo.table.Field;
 import org.meteoinfo.geometry.geoprocess.GeometryUtil;
 import org.meteoinfo.geo.layer.LayerDrawType;
@@ -60,7 +61,7 @@ public class Main extends PluginBase {
     public Main() {
         this.setName("TrajStat");
         this.setAuthor("Yaqiang Wang");
-        this.setVersion("1.5.5");
+        this.setVersion("1.5.6");
         this.setDescription("Trajectory statistics plugin");
         path = GlobalUtil.getAppPath(Main.class);
     }
@@ -517,7 +518,7 @@ public class Main extends PluginBase {
                 for (VectorLayer layer : layers) {
                     for (i = 0; i < layer.getShapeNum(); i++) {
                         int shapeNum = outLayer.getShapeNum();
-                        if (outLayer.editInsertShape((PolylineZShape) layer.getShapes().get(i), shapeNum)) {
+                        if (outLayer.editInsertShape(layer.getShapes().get(i), shapeNum)) {
                             for (j = 0; j < outLayer.getFieldNumber(); j++) {
                                 outLayer.editCellValue(j, shapeNum, layer.getCellValue(j, i));
                             }
