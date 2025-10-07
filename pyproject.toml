@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trajstat"
+version = "0.1.0"
+description = "Python port of the TrajStat trajectory statistics toolkit"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "TrajStat Maintainers"}]
+dependencies = [
+    "typer>=0.9,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+trajstat = "trajstat.cli:app"
