@@ -47,12 +47,74 @@ trajstat timezone GMT+8
 
 Use `trajstat --help` to inspect every command and option.
 
+### PSCF/CWT Examples
+
+The cluster analysis and potential source contribution features are also
+available from the CLI.  The following snippet outlines a typical workflow
+starting from daily trajectory CSV files and a polygon grid layer stored as
+GeoJSON:
+
+```bash
+# Derive cluster means and the total spatial variance for a cluster solution
+trajstat cluster-stats month.tgs 1 5 --point-count 24
+
+# Populate Nij/Mij endpoint counts for PSCF before applying the ratios
+trajstat pscf-counts month.geojson month.tgs --value-field SO2 --missing-value -9999
+
+# Calculate PSCF values and write them back to the grid file
+trajstat pscf month.geojson --nij-field Nij --mij-field Mij --output-field PSCF
+
+# Compute concentration-weighted trajectories using the same layers
+trajstat cwt month.geojson month.tgs --value-field SO2 --missing-value -9999
+```
+
+All PSCF/CWT commands accept `--help` for additional options such as
+thresholded weighting and explicit trajectory count fields.
+
 ## Python API
 
 The :class:`trajstat.main.TrajStatPlugin` façade offers a lightweight, fully
 typed interface for embedding TrajStat functionality inside other
 applications.  All trajectory specific helpers are available from
 `trajstat.trajectory`.
+
+```python
+from pathlib import Path
+
+from trajstat.main import TrajStatPlugin
+from trajstat.vector import VectorLayer
+
+plugin = TrajStatPlugin()
+
+# Load previously converted trajectory layers
+layers = [VectorLayer.from_geojson(Path("month.geojson"))]
+
+# Cluster mean trajectories and TSV
+means, tsv = plugin.calculate_cluster_statistics([1, 1, 2], 1, 24, layers)
+
+# Fill PSCF endpoint counts and compute ratios
+polygon = VectorLayer.from_geojson(Path("grid.geojson"))
+plugin.fill_endpoint_counts(
+    layers,
+    polygon,
+    value_field="SO2",
+    missing_value=-9999,
+    count_field="Nij",
+    trajectory_count_field="Mij",
+)
+pscf = plugin.calculate_pscf(polygon, nij_field="Nij", mij_field="Mij")
+
+# Optional CWT calculation
+cwt, counts = plugin.calculate_cwt(
+    layers,
+    polygon,
+    value_field="SO2",
+    missing_value=-9999,
+)
+```
+
+The `VectorLayer` helper can read GeoJSON, shapefiles, and other vector
+formats supported by Fiona.
 
 ## Testing
 
