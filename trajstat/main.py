@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, List, Sequence
 
 from .trajectory.config import TrajConfig
 from .trajectory.util import (
@@ -11,14 +11,18 @@ from .trajectory.util import (
     add_data_to_traj,
     cal_mean_trajs,
     cal_tsv,
+    calculate_cwt_field,
+    calculate_pscf_field,
     convert_to_shape_file,
     get_time_zone,
     join_tgs_files,
     join_tgs_files_from_config,
+    populate_endpoint_counts,
     traj_cal,
     traj_to_tgs,
     traj_to_tgs_batch,
     traj_to_tgs_from_config,
+    weight_by_counts,
 )
 from .vector import VectorLayer
 
@@ -84,6 +88,82 @@ class TrajStatPlugin:
         means = cal_mean_trajs(clusters, cluster_level, point_num, layers)
         tsv = cal_tsv(clusters, cluster_level, point_num, layers, distance)
         return means, tsv
+
+    def fill_endpoint_counts(
+        self,
+        layers: Sequence[VectorLayer],
+        polygon_layer: VectorLayer,
+        *,
+        value_field: str,
+        missing_value: float,
+        count_field: str,
+        trajectory_count_field: str | None = None,
+        criterion: float | None = None,
+        threshold_height: float | None = None,
+    ) -> tuple[List[int], List[int]]:
+        return populate_endpoint_counts(
+            layers,
+            polygon_layer,
+            value_field=value_field,
+            missing_value=missing_value,
+            count_field=count_field,
+            trajectory_count_field=trajectory_count_field,
+            criterion=criterion,
+            threshold_height=threshold_height,
+        )
+
+    def calculate_pscf(
+        self,
+        polygon_layer: VectorLayer,
+        *,
+        nij_field: str,
+        mij_field: str,
+        output_field: str = "PSCF",
+    ) -> List[float]:
+        return calculate_pscf_field(
+            polygon_layer,
+            nij_field=nij_field,
+            mij_field=mij_field,
+            output_field=output_field,
+        )
+
+    def weight_field(
+        self,
+        polygon_layer: VectorLayer,
+        *,
+        base_field: str,
+        count_field: str,
+        target_field: str,
+        thresholds: Sequence[int],
+        ratios: Sequence[float],
+    ) -> List[float]:
+        return weight_by_counts(
+            polygon_layer,
+            base_field=base_field,
+            count_field=count_field,
+            target_field=target_field,
+            thresholds=thresholds,
+            ratios=ratios,
+        )
+
+    def calculate_cwt(
+        self,
+        layers: Sequence[VectorLayer],
+        polygon_layer: VectorLayer,
+        *,
+        value_field: str,
+        missing_value: float,
+        output_field: str = "CWT",
+        count_field: str | None = None,
+    ) -> tuple[List[float], List[int]]:
+        return calculate_cwt_field(
+            layers,
+            polygon_layer,
+            value_field=value_field,
+            missing_value=missing_value,
+            output_field=output_field,
+            count_field=count_field,
+        )
 
     # Convenience wrappers for direct file based conversions -----------------
     @staticmethod

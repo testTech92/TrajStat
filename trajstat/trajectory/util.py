@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Iterator, List, Sequence
+from typing import Iterable, Iterator, List, Sequence, Tuple
 
 from ..vector import Field, VectorLayer
 from .config import TrajConfig
@@ -472,3 +472,268 @@ def _cast_value(data_type: str, value: str, undef: float) -> object:
     if data_type.lower() == "double":
         return float(value) if value else float(undef)
     return value
+
+
+# ---------------------------------------------------------------------------
+# PSCF/CWT utilities
+
+def populate_endpoint_counts(
+    layers: Sequence[VectorLayer],
+    polygon_layer: VectorLayer,
+    *,
+    value_field: str,
+    missing_value: float,
+    count_field: str,
+    trajectory_count_field: str | None = None,
+    criterion: float | None = None,
+    threshold_height: float | None = None,
+) -> Tuple[List[int], List[int]]:
+    """Populate endpoint counts (``Nij``/``Mij``) for a PSCF/CWT grid."""
+
+    counts, traj_counts = _count_endpoints(
+        layers,
+        polygon_layer,
+        value_field=value_field,
+        missing_value=missing_value,
+        criterion=criterion,
+        threshold_height=threshold_height,
+    )
+    _ensure_field(polygon_layer, count_field, "int")
+    _set_field_values(polygon_layer, count_field, counts)
+    if criterion is None and trajectory_count_field:
+        _ensure_field(polygon_layer, trajectory_count_field, "int")
+        _set_field_values(polygon_layer, trajectory_count_field, traj_counts)
+    polygon_layer.get_attribute_table().save()
+    return counts, traj_counts
+
+
+def calculate_pscf_field(
+    polygon_layer: VectorLayer,
+    *,
+    nij_field: str,
+    mij_field: str,
+    output_field: str,
+) -> List[float]:
+    """Compute PSCF = Mij / Nij and write it back to ``polygon_layer``."""
+
+    nij = _get_numeric_field(polygon_layer, nij_field)
+    mij = _get_numeric_field(polygon_layer, mij_field)
+    values = _calculate_pscf(nij, mij)
+    _ensure_field(polygon_layer, output_field, "double")
+    _set_field_values(polygon_layer, output_field, values)
+    polygon_layer.get_attribute_table().save()
+    return values
+
+
+def weight_by_counts(
+    polygon_layer: VectorLayer,
+    *,
+    base_field: str,
+    count_field: str,
+    target_field: str,
+    thresholds: Sequence[int],
+    ratios: Sequence[float],
+) -> List[float]:
+    """Apply PSCF/CWT weighting rules using a set of thresholds."""
+
+    if len(thresholds) != len(ratios):
+        raise ValueError("Threshold and ratio lists must have the same length")
+    base_values = _get_numeric_field(polygon_layer, base_field)
+    counts = [int(value) for value in _get_numeric_field(polygon_layer, count_field)]
+    weighted = [
+        _apply_weight(base, count, thresholds, ratios)
+        for base, count in zip(base_values, counts)
+    ]
+    _ensure_field(polygon_layer, target_field, "double")
+    _set_field_values(polygon_layer, target_field, weighted)
+    polygon_layer.get_attribute_table().save()
+    return weighted
+
+
+def calculate_cwt_field(
+    layers: Sequence[VectorLayer],
+    polygon_layer: VectorLayer,
+    *,
+    value_field: str,
+    missing_value: float,
+    output_field: str,
+    count_field: str | None = None,
+) -> Tuple[List[float], List[int]]:
+    """Compute concentration weighted trajectories for each grid cell."""
+
+    cwts, counts = _calculate_cwt(
+        layers,
+        polygon_layer,
+        value_field=value_field,
+        missing_value=missing_value,
+    )
+    _ensure_field(polygon_layer, output_field, "double")
+    _set_field_values(polygon_layer, output_field, cwts)
+    if count_field:
+        _ensure_field(polygon_layer, count_field, "int")
+        _set_field_values(polygon_layer, count_field, counts)
+    polygon_layer.get_attribute_table().save()
+    return cwts, counts
+
+
+def _count_endpoints(
+    layers: Sequence[VectorLayer],
+    polygon_layer: VectorLayer,
+    *,
+    value_field: str,
+    missing_value: float,
+    criterion: float | None,
+    threshold_height: float | None,
+) -> Tuple[List[int], List[int]]:
+    cell_count = polygon_layer.get_shape_num()
+    endpoint_counts = [0 for _ in range(cell_count)]
+    trajectory_counts = [0 for _ in range(cell_count)]
+    for layer in layers:
+        field_idx = layer.get_field_idx_by_name(value_field)
+        if field_idx < 0:
+            continue
+        for shape_index, shape in enumerate(layer.get_shapes()):
+            try:
+                value = float(layer.get_cell_value(field_idx, shape_index))
+            except (TypeError, ValueError):
+                continue
+            if _value_is_missing(value, missing_value):
+                continue
+            if criterion is not None and value < criterion:
+                continue
+            visited: set[int] = set()
+            for point in shape:
+                if threshold_height is not None and _point_height(point) > threshold_height:
+                    continue
+                x, y = _point_xy(point)
+                for idx, polygon in enumerate(polygon_layer.get_shapes()):
+                    if _point_in_polygon(x, y, polygon):
+                        endpoint_counts[idx] += 1
+                        if idx not in visited:
+                            trajectory_counts[idx] += 1
+                            visited.add(idx)
+                        break
+    return endpoint_counts, trajectory_counts
+
+
+def _calculate_pscf(nij: Sequence[int], mij: Sequence[int]) -> List[float]:
+    values: List[float] = []
+    for n, m in zip(nij, mij):
+        if n > 0:
+            values.append(m / n)
+        else:
+            values.append(0.0)
+    return values
+
+
+def _calculate_cwt(
+    layers: Sequence[VectorLayer],
+    polygon_layer: VectorLayer,
+    *,
+    value_field: str,
+    missing_value: float,
+) -> Tuple[List[float], List[int]]:
+    cell_count = polygon_layer.get_shape_num()
+    totals = [0.0 for _ in range(cell_count)]
+    counts = [0 for _ in range(cell_count)]
+    for layer in layers:
+        field_idx = layer.get_field_idx_by_name(value_field)
+        if field_idx < 0:
+            continue
+        for shape_index, shape in enumerate(layer.get_shapes()):
+            try:
+                data_value = float(layer.get_cell_value(field_idx, shape_index))
+            except (TypeError, ValueError):
+                continue
+            if _value_is_missing(data_value, missing_value):
+                continue
+            for point in shape:
+                x, y = _point_xy(point)
+                for idx, polygon in enumerate(polygon_layer.get_shapes()):
+                    if _point_in_polygon(x, y, polygon):
+                        totals[idx] += data_value
+                        counts[idx] += 1
+                        break
+    averages = [total / count if count else 0.0 for total, count in zip(totals, counts)]
+    return averages, counts
+
+
+def _apply_weight(
+    value: float, count: int, thresholds: Sequence[int], ratios: Sequence[float]
+) -> float:
+    weighted = value
+    for idx, limit in enumerate(thresholds):
+        ratio = ratios[idx]
+        if idx == len(thresholds) - 1:
+            if count <= limit:
+                weighted = value * ratio
+        else:
+            next_limit = thresholds[idx + 1]
+            if count <= limit and count > next_limit:
+                weighted = value * ratio
+    return weighted
+
+
+def _point_xy(point: object) -> Tuple[float, float]:
+    if hasattr(point, "x") and hasattr(point, "y"):
+        return float(point.x), float(point.y)
+    if hasattr(point, "X") and hasattr(point, "Y"):
+        return float(point.X), float(point.Y)
+    if isinstance(point, (tuple, list)) and len(point) >= 2:
+        return float(point[0]), float(point[1])
+    raise TypeError(f"Unsupported point type: {type(point)!r}")
+
+
+def _point_height(point: object) -> float:
+    if hasattr(point, "z"):
+        return float(point.z)
+    if hasattr(point, "Z"):
+        return float(point.Z)
+    if isinstance(point, (tuple, list)) and len(point) >= 3:
+        return float(point[2])
+    return 0.0
+
+
+def _point_in_polygon(x: float, y: float, polygon: Sequence[object]) -> bool:
+    coords = [_point_xy(pt) for pt in polygon]
+    if not coords:
+        return False
+    # Close polygon if necessary
+    if coords[0] != coords[-1]:
+        coords.append(coords[0])
+    inside = False
+    for (x1, y1), (x2, y2) in zip(coords, coords[1:]):
+        intersects = ((y1 > y) != (y2 > y)) and (
+            x < (x2 - x1) * (y - y1) / ((y2 - y1) or 1e-12) + x1
+        )
+        if intersects:
+            inside = not inside
+    return inside
+
+
+def _ensure_field(layer: VectorLayer, field_name: str, data_type: str) -> None:
+    if layer.get_field_idx_by_name(field_name) == -1:
+        layer.edit_add_field(field_name, data_type)
+
+
+def _set_field_values(layer: VectorLayer, field_name: str, values: Sequence[object]) -> None:
+    for idx, value in enumerate(values):
+        layer.edit_cell_value(field_name, idx, value)
+
+
+def _get_numeric_field(layer: VectorLayer, field_name: str) -> List[float]:
+    idx = layer.get_field_idx_by_name(field_name)
+    if idx == -1:
+        return [0.0 for _ in range(layer.get_shape_num())]
+    values: List[float] = []
+    for row in range(layer.get_shape_num()):
+        cell = layer.get_cell_value(idx, row)
+        try:
+            values.append(float(cell))
+        except (TypeError, ValueError):
+            values.append(0.0)
+    return values
+
+
+def _value_is_missing(value: float, missing_value: float, tol: float = 1e-6) -> bool:
+    return abs(value - missing_value) <= tol
