@@ -6,6 +6,8 @@ plug-in.  The code base provides the same high level capabilities as the Java
 version – trajectory conversion, data augmentation and clustering utilities –
 while embracing the Python ecosystem.
 
+> 🇨🇳 文档：请参阅 [中文 README](README.zh.md) 以获取计算公式与实现说明。
+
 ## Features
 
 - Execute external HYSPLIT calculations using rich `TrajConfig` objects.
